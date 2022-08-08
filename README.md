@@ -4,7 +4,7 @@ Standard lab and field protocols can be found here. Any modifications require th
 Before beginning a new technique, review the entire protocol and set a meeting with Dr. Sistla to ensure that you fully understand the purpose, approach, and expected data range before starting the protocol.
 
 This folder is arranged by:
-*field soil and plant collection protocols
+*field collection protocols
 *soil and plant processing protocols
 *soil nutrient extraction protocols
 *nutrient analysis protocols (plate reader)
