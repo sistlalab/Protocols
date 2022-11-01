@@ -1,0 +1,180 @@
+---
+title: "POXC Topaz (Plateplan 1)"
+author: "Amanda Gersoff"
+date: '2022-07-29'
+output: html_document
+---
+#subset stock and abs separately 
+#plot linear regression 
+#have weights of soil (in kg)
+
+#POXC (mg/kg soil) = [0.02 mol/L - (a+b * Abs)] * (9000 mg C/ mol)* (0.02 L solution/Wt)
+# a = intcp of std curve, b = slope. Abs = unknown abs, Wt = weight of air-dried soil sample in kg
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r}
+library(lme4)
+require(readxl)
+require(reshape2)
+require(melt)
+require(ggplot2)
+library(tidyverse)
+```
+
+##standard regression code
+```{r}
+ggplotRegression <- function (fit) {
+
+require(ggplot2)
+
+ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                     "Intercept =",signif(fit$coef[[1]],5 ),
+                     " Slope =",signif(fit$coef[[2]], 5),
+                     " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+```
+
+#load data files - plate plan, tecan data, melt POXC data and merge with plate plan
+ 
+```{r}
+plateplan<-read_excel("POXC_Topaz_2.xlsx", 
+                      sheet = "Plateplan_Topaz1")[,1:4]
+
+plateplan<-na.omit(plateplan)
+
+POXCweight<-read_excel("POXC_Topaz_2.xlsx", 
+                 sheet = "Weights")
+
+POXCdata<-read_excel("POXC_Topaz_2.xlsx", 
+                       sheet = "Tecan_Topaz1")[26:33,1:13]
+
+names(POXCdata)<-c("row", 1:12)
+POXCdata[,2:13]<-lapply(POXCdata[,2:13],as.numeric)
+
+POXCdata_melt<-melt(POXCdata)
+names(POXCdata_melt)[2]<-"column"
+POXCdata_melt<-merge(POXCdata_melt, plateplan, by=c("row", "column"))
+```
+
+##extract POXC standards, create std curve, remove NAs and aggregate means by sample ID
+```{r}
+stds<-subset(POXCdata_melt, `sample position`=="standard")
+stds$Soil_ID<-as.numeric(as.character(stds$Soil_ID))
+stdcurve<-summary(lm(Soil_ID~value, stds))
+ 
+ggplotRegression(lm(Soil_ID~value, stds))
+ 
+slope<-stdcurve$coefficients[2]
+intercept<-stdcurve$coefficients[1]
+
+POXCdata_melt0 <- na.omit(POXCdata_melt)
+
+means<-aggregate(value~Soil_ID, POXCdata_melt0, "mean")
+```
+ 
+
+# Calculate POXC (mg/kg soil) by  air dry  soil weight, corrected by slope, intercept, and value (absorbance)
+ 
+```{r}
+
+POXC_means<- merge(POXCweight, means, by.x = "Soil_ID", by.y = "Soil_ID")
+
+POXC_means$POXC_mgkgsoil <- (0.02 - (intercept + (slope * POXC_means$value))) * (9000)* (0.02/POXC_means$`Weight_kg`)
+
+```
+ 
+ 
+Plot POXC data
+```{r , echo=FALSE}
+
+
+POXCplot<-ggplot(POXC_means,
+       mapping= aes(x=Treatment,
+                    y=POXC_mgkgsoil, fill=Treatment))+geom_boxplot()+ theme_bw()+theme(panel.grid = element_blank(), legend.position = "none")+theme(panel.grid = element_blank()) +scale_fill_manual(values=c("hotpink3", "darkolivegreen4")) + labs(x = '', y = expression(POX~C~(frac(mg~C,kg~soil))))
+POXCplot
+ 
+```
+
+```{r}
+
+write.csv(POXC_means, "FinalPOXC_EXAMPLE.csv")
+write.csv(POXC_means2, "FinalPOXC_EXAMPLE2.csv")
+
+POXC_final<-read.csv("FinalPOXC_EXAMPLE.csv")
+POXC_final2<-read.csv("FinalPOXC_EXAMPLE2.csv")
+MergedPOXC_EXAMPLE<-rbind(POXC_final, POXC_final2)
+
+```
+
+
+```{r}
+# Plot POXC data- merge POXC data for POXC_means and POXC_means2
+
+POXCplot_merged <-ggplot(MergedPOXC_EXAMPLE,
+       mapping= aes(x=Treatment,
+                    y=POXC_mgkgsoil, fill=Treatment))+geom_boxplot()+ theme_bw()+theme(panel.grid = element_blank(), legend.position = "none")+theme(panel.grid = element_blank()) + labs(x = '', y = expression(POX~C~(frac(mg~C,kg~soil))))
+
+POXCplot_merged
+ 
+
+```
+
+```{r}
+
+# Check for normal distribution --> looks like there's an outlier near 800
+table(MergedPOXC_EXAMPLE$POXC_mgkgsoil)
+hist(MergedPOXC_EXAMPLE$POXC_mgkgsoil)
+
+
+# run ANOVA test on merged POXC data
+# ANOVA test- comparing the treatments
+treatment.aov <- aov(POXC_mgkgsoil ~ Treatment, data = MergedPOXC_EXAMPLE)
+summary(treatment.aov)
+treatment.aov
+
+# From the ANOVA test p = 0.319
+
+# Tukey's Test
+TukeyHSD(treatment.aov, conf.level=.95) 
+
+# P values from the Tukey test: 
+# Under-Adjacent: p=0.9999149
+# Reference 21-Reference: 20 p=0.4389126
+# Reference 20-Adjacent: p=0.9999788
+# Reference 21-Adjacent: p=0.3795848
+# Under- Reference 20: 0.9999984
+# Under- Reference 21: 0.3504796
+
+
+```
+
+```{r}
+# ggplot- revised from above
+MergedPOXC_EXAMPLE %>%
+  group_by(Treatment) %>%
+  ggplot(mapping = aes(y = POXC_mgkgsoil, x = Treatment, fill = Treatment)) +
+  geom_boxplot() + 
+  labs(x = "Treatment" , y = expression(POX~C~(frac(mg~C,kg~soil))), title = "POXC based on Treatment")
+```
+```{r}
+# ggplot- changed to look like other plots
+MergedPOXC_EXAMPLE %>%
+  group_by(Treatment) %>%
+  ggplot(mapping = aes(y = POXC_mgkgsoil, x = Treatment)) +
+  geom_boxplot() + 
+  geom_boxplot(alpha = 0.2) +
+  theme_classic() +
+  labs(x = '' , y = expression(POX~C~(frac(mg~C,kg~soil))), title = "POXC based on Treatment")
+```
+```
+
+
+ 

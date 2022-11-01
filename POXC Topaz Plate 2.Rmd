@@ -1,0 +1,119 @@
+---
+title: "POXC Topaz (Plateplan 2)"
+author: "Amanda Gersoff"
+date: '2022-08-08'
+output: html_document
+---
+#subset stock and abs separately 
+#plot linear regression 
+#have weights of soil (in kg)
+
+#POXC (mg/kg soil) = [0.02 mol/L - (a+b * Abs)] * (9000 mg C/ mol)* (0.02 L solution/Wt)
+# a = intcp of std curve, b = slope. Abs = unknown abs, Wt = weight of air-dried soil sample in kg
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages
+```{r}
+library(lme4)
+require(readxl)
+require(reshape2)
+require(melt)
+require(ggplot2)
+library(tidyverse)
+```
+
+##standard regression code
+```{r}
+ggplotRegression <- function (fit) {
+
+require(ggplot2)
+
+ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                     "Intercept =",signif(fit$coef[[1]],5 ),
+                     " Slope =",signif(fit$coef[[2]], 5),
+                     " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+```
+
+#load data files - plate plan, tecan data, melt POXC data and merge with plate plan
+ 
+```{r}
+plateplan2<-read_excel("POXC_Topaz_3.xlsx", 
+                      sheet = "Plateplan_Topaz2")[,1:4]
+
+plateplan2<-na.omit(plateplan2)
+
+POXCweight2<-read_excel("POXC_Topaz_3.xlsx", 
+                 sheet = "Weights")
+
+POXCdata2<-read_excel("POXC_Topaz_2.xlsx", 
+                       sheet = "Tecan_Topaz2")[26:33,1:13]
+
+names(POXCdata2)<-c("row", 1:12)
+POXCdata2[,2:13]<-lapply(POXCdata2[,2:13],as.numeric)
+
+POXCdata_melt2<-melt(POXCdata2)
+names(POXCdata_melt2)[2]<-"column"
+POXCdata_melt2<-merge(POXCdata_melt2, plateplan2, by=c("row", "column"))
+```
+
+##extract POXC standards, create std curve, remove NAs and aggregate means by sample ID
+```{r}
+stds2<-subset(POXCdata_melt2, `sample position`=="standard")
+stds2$Soil_ID<-as.numeric(as.character(stds2$Soil_ID))
+stdcurve2<-summary(lm(Soil_ID~value, stds2))
+ 
+ggplotRegression(lm(Soil_ID~value, stds2))
+ 
+slope2<-stdcurve2$coefficients[2]
+intercept2<-stdcurve2$coefficients[1]
+
+POXCdata_melt20 <- na.omit(POXCdata_melt2)
+
+means2<-aggregate(value~Soil_ID, POXCdata_melt20, "mean")
+```
+ 
+
+# Calculate POXC (mg/kg soil) by  air dry  soil weight, corrected by slope, intercept, and value (absorbance)
+ 
+```{r}
+
+POXC_means2<- merge(POXCweight2, means2, by.x = "Soil_ID", by.y = "Soil_ID")
+
+POXC_means2$POXC_mgkgsoil <- (0.02 - (intercept2 + (slope2 * POXC_means2$value))) * (9000)* (0.02/POXC_means2$`Weight_kg`)
+
+```
+ 
+ 
+Plot POXC data
+```{r , echo=FALSE}
+
+
+POXCplot2<-ggplot(POXC_means2,
+       mapping= aes(x=Treatment,
+                    y=POXC_mgkgsoil, fill=Treatment))+geom_boxplot()+ theme_bw()+theme(panel.grid = element_blank(), legend.position = "none")+theme(panel.grid = element_blank()) +scale_fill_manual(values=c("hotpink3", "darkolivegreen4")) + labs(x = '', y = expression(POX~C~(frac(mg~C,kg~soil))))
+POXCplot2
+ 
+```
+ 
+```{r}
+
+write.csv(POXC_means, "FinalPOXC_EXAMPLE.csv")
+write.csv(POXC_means2, "FinalPOXC_EXAMPLE2.csv")
+
+POXC_final<-read.csv("FinalPOXC_EXAMPLE.csv")
+POXC_final2<-read.csv("FinalPOXC_EXAMPLE2.csv")
+MergedPOXC_EXAMPLE<-rbind(POXC_final, POXC_final2)
+
+```
+
+
+
+ 
