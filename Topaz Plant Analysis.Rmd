@@ -1,0 +1,118 @@
+---
+title: "Plant Community Analysis"
+author: "Amanda Gersoff"
+date: '2022-06-26'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = "center")
+```
+
+# Loading in Packages
+```{r}
+library(tidyverse)
+library(here) 
+```
+
+# Set working directory setwd() as "/Users/amandagersoff/Desktop/Solar_R/Plant Analysis"
+# Import dataset "Species_Richness.xlsx" from Excel
+
+# Check for outliers
+```{r}
+
+# (data$X - mean(data$X))/sd(X)
+
+(Species_Richness$species_richness - mean(Species_Richness$species_richness))/sd(Species_Richness$species_richness)
+
+(Species_Richness$family_count - mean(Species_Richness$family_count))/sd(Species_Richness$family_count)
+```
+
+# Species Richness
+```{r}
+table(Species_Richness$species_richness)
+hist(Species_Richness$species_richness)
+
+
+species_richness_table <- Species_Richness%>%
+  group_by(treatment) %>%
+  summarise(
+    mean = mean(species_richness),
+    med = median(species_richness),
+    sd = sd(species_richness),
+    min = min(species_richness),
+    max = max(species_richness))
+
+```
+
+# Family Diversity
+```{r}
+table(Species_Richness$family_count)
+hist(Species_Richness$family_count)
+
+
+family_count_table <- Species_Richness%>%
+  group_by(treatment) %>%
+  summarise(
+    mean = mean(family_count),
+    med = median(family_count),
+    sd = sd(family_count),
+    min = min(family_count),
+    max = max(family_count))
+
+```
+
+
+```{r}
+
+# ggplot
+Species_Richness %>%
+  group_by(treatment) %>%
+  ggplot(mapping = aes(y = species_richness, x = treatment)) +
+  geom_boxplot(alpha = 0.2) +
+  theme_classic() +
+  labs(y = "Species Richness" , x = '')
+
+
+```
+
+```{r}
+# ggplot
+Species_Richness %>%
+  group_by(treatment) %>%
+  ggplot(mapping = aes(y = family_count, x = treatment)) +
+  geom_boxplot(alpha = 0.2) +
+  theme_classic() +
+  labs(y = "Family Diversity (Number of Plant Families)" , x = '')
+
+```
+
+# One-Way Anova
+```{r}
+# Species Richness
+richness.aov <- aov(species_richness ~ treatment, data = Species_Richness)
+summary(richness.aov)
+richness.aov
+
+
+# Tukey's Test
+TukeyHSD(richness.aov, conf.level=.95) 
+
+
+```
+
+```{r}
+# Family Diversity
+families.aov <- aov(family_count ~ treatment, data = Species_Richness)
+summary(families.aov)
+families.aov
+
+
+# Tukey's Test
+TukeyHSD(families.aov, conf.level=.95) 
+
+```
+
